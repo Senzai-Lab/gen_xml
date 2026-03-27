@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-gen-xml = "gen_xml:main"
+gen_xml = "gen_xml:main"
 
 [build-system]
 requires = ["hatchling"]
