@@ -1,7 +1,6 @@
 import argparse
 from pathlib import Path
 from xml.dom import minidom
-from rich import print
 
 import xml.etree.ElementTree as ET
 import spikeinterface.extractors as se

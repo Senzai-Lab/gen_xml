@@ -5,7 +5,6 @@ description = "Generate Neuroscope XML from OpenEphys recordings"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "rich",
     "spikeinterface[extractors]",
 ]
 
