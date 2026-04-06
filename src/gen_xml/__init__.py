@@ -112,11 +112,26 @@ def create_neuroscope_xml(probe_map, fs = 30000, n_channels = 384, pad_groups=0,
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Generate Neuroscope XML from OpenEphys recording.')
+    parser = argparse.ArgumentParser(description='Generate XML configuration file for Neuroscope.')
     parser.add_argument('session_path', type=str, help='Path to the OpenEphys session directory')
     parser.add_argument('--pad_groups', type=int, default=10, help='Number of skip channels to pad between groups (default: 10)')
+    parser.add_argument('--from_probe', action='store_true', help='Generate XML from probe file')
+    parser.add_argument('--from_si', action='store_true', help='Generate XML from SpikeInterface recording')
     args = parser.parse_args()
     
+    if args.from_si:
+        rec = si.load(args.session_path)
+        fs = int(rec.get_sampling_frequency())
+        n_channels = rec.get_num_channels()
+        xml_str = create_neuroscope_xml(rec.get_probe().to_dataframe(),
+                                        fs=fs,
+                                        n_channels=n_channels,
+                                        pad_groups=args.pad_groups,
+                                        sync_channel=False)
+        fname = Path(args.session_path) / "continuous.xml"
+        with open(fname, "w") as f:
+            f.write(xml_str)
+
     # Load recordings with SpikeInterface
     stream_names, stream_ids = se.get_neo_streams('openephysbinary', args.session_path)
 
