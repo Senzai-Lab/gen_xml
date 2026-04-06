@@ -4,6 +4,7 @@ from xml.dom import minidom
 
 import xml.etree.ElementTree as ET
 import spikeinterface.extractors as se
+import spikeinterface.core as si
 
 def cmap(shank_id):
     shank_id = int(shank_id)
