@@ -116,7 +116,7 @@ def main():
     parser.add_argument('--from_probe', type=str, help='Generate XML from probe file')
     parser.add_argument('--from_si', type=str, help='Generate XML from SpikeInterface recording folder')
     parser.add_argument('--fs', type=int, default=None, help='Sampling frequency')
-    parser.add_argument('--name', type=str, default=None, help='Name of the XML file to create (default: same as binary file with .xml extension)')
+    parser.add_argument('--name', type=str, default=None, help='Name of the XML file to create')
     args = parser.parse_args()
 
     if args.from_probe:
