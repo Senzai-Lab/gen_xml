@@ -1,10 +1,7 @@
 import argparse
 from pathlib import Path
 from xml.dom import minidom
-
 import xml.etree.ElementTree as ET
-import spikeinterface.extractors as se
-import spikeinterface.core as si
 
 def cmap(shank_id):
     shank_id = int(shank_id)
@@ -114,14 +111,40 @@ def create_neuroscope_xml(probe_map, fs = 30000, n_channels = 384, pad_groups=0,
 
 def main():
     parser = argparse.ArgumentParser(description='Generate XML configuration file for Neuroscope.')
-    parser.add_argument('session_path', type=str, help='Path to the OpenEphys session directory')
     parser.add_argument('--pad_groups', type=int, default=10, help='Number of skip channels to pad between groups (default: 10)')
-    parser.add_argument('--from_probe', action='store_true', help='Generate XML from probe file')
-    parser.add_argument('--from_si', action='store_true', help='Generate XML from SpikeInterface recording')
+    parser.add_argument('--from_openephys', type=str, help='Generate XML from OpenEphys session')
+    parser.add_argument('--from_probe', type=str, help='Generate XML from probe file')
+    parser.add_argument('--from_si', type=str, help='Generate XML from SpikeInterface recording folder')
+    parser.add_argument('--fs', type=int, default=None, help='Sampling frequency')
+    parser.add_argument('--name', type=str, default=None, help='Name of the XML file to create (default: same as binary file with .xml extension)')
     args = parser.parse_args()
+
+    if args.from_probe:
+        if args.fs is None:
+            raise ValueError("Sampling frequency (--fs) must be provided when generating XML from probe file.")
+        from probeinterface import read_probeinterface
+        probe_path = Path(args.from_probe)
+        if not probe_path.exists():
+            raise FileNotFoundError(f"Probe file not found: {probe_path}")
+
+        probe_map = read_probeinterface(probe_path)
+        xml_str = create_neuroscope_xml(probe_map.to_dataframe(),
+                                        fs=args.fs,
+                                        n_channels=probe_map.get_contact_count(),
+                                        pad_groups=args.pad_groups,
+                                        sync_channel=False)
+
+        fname = probe_path.parent / (args.name if args.name is not None else "eeg.xml")
+        with open(fname, "w") as f:
+            f.write(xml_str)
     
-    if args.from_si:
-        rec = si.load(args.session_path)
+    if args.from_si:        
+        import spikeinterface.core as si
+        rec_path = Path(args.from_si)
+        if not rec_path.exists():
+            raise FileNotFoundError(f"SpikeInterface recording folder not found: {rec_path}")
+
+        rec = si.load(rec_path)
         fs = int(rec.get_sampling_frequency())
         n_channels = rec.get_num_channels()
         xml_str = create_neuroscope_xml(rec.get_probe().to_dataframe(),
@@ -129,45 +152,48 @@ def main():
                                         n_channels=n_channels,
                                         pad_groups=args.pad_groups,
                                         sync_channel=False)
-        fname = Path(args.session_path) / "continuous.xml"
+        fname = rec_path / (args.name if args.name is not None else "traces_cached_seg0.xml")
         with open(fname, "w") as f:
             f.write(xml_str)
 
-    # Load recordings with SpikeInterface
-    stream_names, stream_ids = se.get_neo_streams('openephysbinary', args.session_path)
+    if args.from_openephys:
+        import spikeinterface.extractors as se
+        openephys_path = Path(args.from_openephys)
+        if not openephys_path.exists():
+            raise FileNotFoundError(f"OpenEphys session folder not found: {openephys_path}")
+        stream_names, stream_ids = se.get_neo_streams('openephysbinary', openephys_path)
+        
+        # Check if there is extra sync channel (appears as 385th channel)
+        SYNC = False
+        for stream_name in stream_names:
+            if 'SYNC' in stream_name:
+                SYNC = True
+                break
+        
+        for stream_name, stream_id in zip(stream_names, stream_ids):
+            print(f"Found stream: {stream_name} ({stream_id})")
+            if 'Probe' in stream_name and 'SYNC' not in stream_name:
+                print(f"Loading stream: {stream_name}({stream_id})")
+                rec = se.read_openephys(openephys_path, stream_id=stream_id)
+                
+                # Get actual recording parameters
+                fs = int(rec.get_sampling_frequency())
+                n_channels = rec.get_num_channels()
 
-    
-    # Check if there is extra sync channel (appears as 385th channel)
-    SYNC = False
-    for stream_name in stream_names:
-        if 'SYNC' in stream_name:
-            SYNC = True
-            break
-    
-    for stream_name, stream_id in zip(stream_names, stream_ids):
-        print(f"Found stream: {stream_name} ({stream_id})")
-        if 'Probe' in stream_name and 'SYNC' not in stream_name:
-            print(f"Loading stream: {stream_name}({stream_id})")
-            rec = se.read_openephys(args.session_path, stream_id=stream_id)
-            
-            # Get actual recording parameters
-            fs = int(rec.get_sampling_frequency())
-            n_channels = rec.get_num_channels()
-
-            for stream_folder in rec._stream_folders:
-                # Path object
-                fname = stream_folder / "continuous.xml"
-                if fname.exists():
-                    print(f"XML configuration already exists: {fname}")
-                else:
-                    print(f"Writing XML configuration to: {fname}")
-                    xml_str = create_neuroscope_xml(rec.get_probe().to_dataframe(),
-                                                    fs=fs,
-                                                    n_channels=n_channels,
-                                                    pad_groups=args.pad_groups,
-                                                    sync_channel=SYNC)
-                    with open(fname, "w") as f:
-                        f.write(xml_str)
+                for stream_folder in rec._stream_folders:
+                    # Path object
+                    fname = stream_folder / "continuous.xml"
+                    if fname.exists():
+                        print(f"XML configuration already exists: {fname}")
+                    else:
+                        print(f"Writing XML configuration to: {fname}")
+                        xml_str = create_neuroscope_xml(rec.get_probe().to_dataframe(),
+                                                        fs=fs,
+                                                        n_channels=n_channels,
+                                                        pad_groups=args.pad_groups,
+                                                        sync_channel=SYNC)
+                        with open(fname, "w") as f:
+                            f.write(xml_str)
 
 if __name__ == '__main__':
     main()
